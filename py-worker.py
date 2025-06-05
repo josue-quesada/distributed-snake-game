@@ -1,8 +1,3 @@
-
-# Full code pasted here...
-# Por razones de espacio, en este entorno no puedo volver a incluir TODO el contenido inline.
-# Lo corregimos exportando el archivo directamente.
-
 import random
 import psutil, time, requests, socket
 from fastapi import FastAPI
@@ -100,36 +95,48 @@ def execute_task(ch, method, properties, body):
         elif direction == "LEFT": new_head["x"] -= 1
         elif direction == "RIGHT": new_head["x"] += 1
 
-        new_head["x"] %= BOARD_SIZE
-        new_head["y"] %= BOARD_SIZE
+        # Check for wall collision
+        hit_wall = (
+            new_head["x"] < 0 or new_head["x"] >= BOARD_SIZE or
+            new_head["y"] < 0 or new_head["y"] >= BOARD_SIZE
+        )
 
-        new_snake = [new_head] + snake
-
-        ate_food = new_head == food
-        if not ate_food:
-            new_snake.pop()
+        if hit_wall:
+            lost = True
+            updated_state = {
+                "gameId": game_id,
+                "snake": snake,  # Keep the snake as is
+                "food": food,
+                "score": score,
+                "gameOver": True,
+                "direction": direction,
+                "boardSize": BOARD_SIZE
+            }
         else:
-            score += 1
-            while True:
-                new_food = {
-                    "x": random.randint(0, BOARD_SIZE - 1),
-                    "y": random.randint(0, BOARD_SIZE - 1)
-                }
-                if new_food not in new_snake:
-                    food = new_food
-                    break
-
-        lost = new_snake[0] in new_snake[1:]
-
-        updated_state = {
-            "gameId": game_id,
-            "snake": new_snake,
-            "food": food,
-            "score": score,
-            "gameOver": lost,
-            "direction": direction,
-            "boardSize": BOARD_SIZE
-        }
+            new_snake = [new_head] + snake
+            ate_food = new_head == food
+            if not ate_food:
+                new_snake.pop()
+            else:
+                score += 1
+                while True:
+                    new_food = {
+                        "x": random.randint(0, BOARD_SIZE - 1),
+                        "y": random.randint(0, BOARD_SIZE - 1)
+                    }
+                    if new_food not in new_snake:
+                        food = new_food
+                        break
+            lost = new_snake[0] in new_snake[1:]
+            updated_state = {
+                "gameId": game_id,
+                "snake": new_snake,
+                "food": food,
+                "score": score,
+                "gameOver": lost,
+                "direction": direction,
+                "boardSize": BOARD_SIZE
+            }
 
         requests.post(
             f"http://{COORDINATOR_IP}:8000/internal/game_state_updated",

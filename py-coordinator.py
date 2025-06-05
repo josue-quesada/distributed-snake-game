@@ -27,7 +27,7 @@ app.add_middleware(
 # GAME_TASKS_QUEUE = 'game_tasks' # Superseded by GAME_LOGIC_QUEUE
 GAME_LOGIC_QUEUE = 'game_logic_tasks'
 BOARD_SIZE = 20 # Default board size
-GAME_TICK_INTERVAL = 0.2 # Seconds between game ticks (e.g., 0.2 for 5 updates/sec)
+GAME_TICK_INTERVAL = 1 # Seconds between game ticks (e.g., 0.2 for 5 updates/sec)
 
 # --- New Game State Management and Models ---
 game_instances: Dict[str, 'GameStateModel'] = {}
@@ -239,7 +239,18 @@ async def internal_update_game_state(payload: UpdateGameStateInternalPayload):
         print(f"[WARN] Received internal update for unknown game_id: {game_id}")
         return {"status": "error", "message": "Game ID not found during internal update"}, 404
 
+workers_info: Dict[str, dict] = {}
 
+@app.post("/report")
+async def report_worker_status(info: dict):
+    name = info.get("name")
+    if name:
+        workers_info[name] = info
+    return {"status": "ok"}
+
+@app.get("/workers")
+async def get_workers():
+    return list(workers_info.values())
 
 if __name__ == "__main__":
     # Start the game loop in a background thread

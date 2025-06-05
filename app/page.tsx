@@ -22,6 +22,7 @@ export default function SnakeGame() {
   const [lastKey, setLastKey] = useState<string>("");
   const [gameId, setGameId] = useState<string | null>(null);
   const [food, setFood] = useState<Position | null>(null);
+  const [nodes, setNodes] = useState<any[]>([]);
 
   const GRID_SIZE = 20;
   const CANVAS_SIZE = 400;
@@ -211,6 +212,19 @@ export default function SnakeGame() {
     return () => window.removeEventListener("keydown", handleKeyPress);
   }, [handleKeyPress]);
 
+  // Fetch node utilization info
+  useEffect(() => {
+    const fetchNodes = () => {
+      fetch("http://localhost:8000/workers")
+        .then((res) => res.json())
+        .then((data) => setNodes(data))
+        .catch(() => setNodes([]));
+    };
+    fetchNodes();
+    const interval = setInterval(fetchNodes, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full space-y-6">
@@ -295,6 +309,48 @@ export default function SnakeGame() {
                 se registran en la consola del navegador (F12) para facilitar la
                 integración con el backend distribuido.
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Node Utilization Card */}
+        <Card className="bg-gray-900/60 border-green-500/20 mt-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-green-300 font-mono text-base">
+              Nodos activos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Array.isArray(nodes) && nodes.length === 0 && (
+                <div className="text-gray-400 text-xs">
+                  No hay nodos activos.
+                </div>
+              )}
+              {Array.isArray(nodes) &&
+                nodes.map((node, idx) => (
+                  <div
+                    key={node.name || idx}
+                    className="p-2 rounded bg-gray-800/80 border border-green-700/30 flex flex-col gap-1"
+                  >
+                    <div className="font-mono text-green-400 text-sm">
+                      {node.name}
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      CPU:{" "}
+                      <span className="text-green-300">{node.cpu}%</span>
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      RAM:{" "}
+                      <span className="text-green-300">{node.ram}%</span>
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      Net:{" "}
+                      <span className="text-green-300">{node.net} MB/s</span>
+                    </div>
+                    <div className="text-xs text-gray-400">IP: {node.ip}</div>
+                  </div>
+                ))}
             </div>
           </CardContent>
         </Card>
