@@ -10,7 +10,7 @@ import json
 import os
 
 # Configuration
-COORDINATOR_IP = "100.67.213.98"
+COORDINATOR_IP = "100.120.4.105"
 NODE_NAME = "snake-worker"
 RABBIT_HOST = COORDINATOR_IP
 RABBIT_PORT = 5672
@@ -220,4 +220,4 @@ def create_app():
 app = create_app()
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8003)
+    uvicorn.run(app, host='0.0.0.0', port=8004)

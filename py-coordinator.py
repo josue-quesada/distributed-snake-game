@@ -28,6 +28,8 @@ app.add_middleware(
 GAME_LOGIC_QUEUE = 'game_logic_tasks'
 BOARD_SIZE = 20 # Default board size
 GAME_TICK_INTERVAL = 1 # Seconds between game ticks (e.g., 0.2 for 5 updates/sec)
+COORDINATOR_IP = '100.120.4.105'
+
 
 # --- New Game State Management and Models ---
 game_instances: Dict[str, 'GameStateModel'] = {}
@@ -44,6 +46,7 @@ class GameStateModel(BaseModel):
     direction: str # Current direction of the snake (e.g., "UP", "DOWN")
     boardSize: int = BOARD_SIZE
     gameId: Optional[str] = None # Will be set when instance is created
+    last_move_processed_time: float = 0.0 # Timestamp of the last processed move
 
 class JoinResponse(BaseModel):
     gameId: str
@@ -94,7 +97,8 @@ def create_initial_game_state(game_id: str) -> GameStateModel:
         score=0,
         gameOver=False,
         direction="RIGHT", # Initial direction
-        boardSize=BOARD_SIZE
+        boardSize=BOARD_SIZE,
+        last_move_processed_time=0.0
     )
 
 from typing import Optional
@@ -105,7 +109,7 @@ def rabbitmq_channel():
     try:
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
-                host='100.67.213.98',  # <- IP Tailscale del servidor RabbitMQ
+                host=COORDINATOR_IP,  # <- IP Tailscale del servidor RabbitMQ
                 port=5672,   
                 credentials=pika.PlainCredentials('myuser', 'mypassword')
             )
@@ -125,6 +129,7 @@ game_instances = {}
 async def join_game():
     game_id = uuid4().hex
     initial_state = create_initial_game_state(game_id)
+    initial_state.last_move_processed_time = time.time() # Initialize on game creation
     game_instances[game_id] = initial_state
     print(f"Game created with ID: {game_id}")
     return JoinResponse(gameId=game_id, initialState=initial_state)
@@ -132,7 +137,17 @@ async def join_game():
 @app.post("/move")
 async def move_snake(payload: MovePlayerPayload):
     game_id = payload.gameId
+    current_time = time.time()
     current_game_state = game_instances.get(game_id)
+
+    if not current_game_state:
+        return JSONResponse(content={"status": "error", "message": "Game not found"}, status_code=404)
+
+    if current_time - current_game_state.last_move_processed_time < 1.0: # 1 second throttle
+        return JSONResponse(content={"status": "too_many_requests", "message": "Move ignored, too soon after last move."}, status_code=429)
+
+    # Redundant assignments of game_id and current_game_state removed.
+    # current_game_state (defined and checked earlier in the function) is used in subsequent logic.
 
     if not current_game_state or current_game_state.gameOver:
         return {"status": "error", "message": "Game not found or over"}, 404
@@ -159,6 +174,8 @@ async def move_snake(payload: MovePlayerPayload):
     # However, with a game loop, this endpoint's main job is to set the direction.
     # For now, we will still queue a task to make the move feel responsive, 
     # even if the game loop would also pick it up.
+
+    current_game_state.last_move_processed_time = current_time # Update timestamp after all validations pass
 
     task_id = uuid4().hex
     # Create a snapshot of the state to send for this specific move task

@@ -23,6 +23,11 @@ export default function SnakeGame() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [food, setFood] = useState<Position | null>(null);
   const [nodes, setNodes] = useState<any[]>([]);
+  const lastKeyPressTimeRef = useRef<number>(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [gameStartTime, setGameStartTime] = useState<number>(0);
+  const [finalScore, setFinalScore] = useState<number>(0);
+  const [gameDuration, setGameDuration] = useState<string>("00:00");
 
   const GRID_SIZE = 20;
   const CANVAS_SIZE = 400;
@@ -120,6 +125,18 @@ export default function SnakeGame() {
   // Manejar teclas
   const handleKeyPress = useCallback(
     (e: KeyboardEvent) => {
+      const now = Date.now();
+      if (now - lastKeyPressTimeRef.current < 1000) {
+        return; // Throttle input
+      }
+      lastKeyPressTimeRef.current = now;
+
+      if (!gameStarted) {
+        setGameStarted(true);
+        setGameStartTime(Date.now()); // Record start time
+        setGameOver(false); // Ensure game over is false when starting
+      }
+
       let newDirection: Direction = { x: 0, y: 0 };
       let keyPressed = "";
 
@@ -194,12 +211,24 @@ export default function SnakeGame() {
       fetch(`http://localhost:8000/state/${gameId}`)
         .then((res) => res.json())
         .then((data) => {
-          setSnake(data.snake);
-          setFood(data.food);
+          if (data.gameOver && !gameOver) {
+            setGameOver(true);
+            setGameStarted(false); // Stop game logic
+            const durationSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
+            const minutes = Math.floor(durationSeconds / 60);
+            const seconds = durationSeconds % 60;
+            setGameDuration(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+            setFinalScore(data.score !== undefined ? data.score : snake.length); // Use snake.length as fallback for score
+          } else if (!data.gameOver) {
+            setSnake(data.snake);
+            setFood(data.food);
+            // Ensure score is updated if available from backend, otherwise snake length is used at game over
+            // If your backend sends score continuously, you might want a dedicated score state
+          }
         });
     }, 150);
     return () => clearInterval(interval);
-  }, [gameId, gameStarted]);
+  }, [gameId, gameStarted, gameOver, gameStartTime, snake.length]); // Added gameOver, gameStartTime, snake.length to dependencies
 
   // Dibujar en cada frame
   useEffect(() => {
@@ -210,7 +239,27 @@ export default function SnakeGame() {
   useEffect(() => {
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [handleKeyPress]);
+  }, [handleKeyPress, gameStarted]); // Added gameStarted to dependencies
+
+  const resetGame = () => {
+    setGameOver(false);
+    setGameStarted(false);
+    setDirection({ x: 0, y: 0 });
+    setLastKey("");
+    setGameStartTime(0);
+    setFinalScore(0);
+    setGameDuration("00:00");
+    // Fetch new game session
+    fetch("http://localhost:8000/join", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        setGameId(data.gameId);
+        setSnake(data.initialState.snake);
+        setFood(data.initialState.food);
+        // gameStarted will be set to true on the first keypress in the new game
+      })
+      .catch(console.error);
+  };
 
   // Fetch node utilization info
   useEffect(() => {
@@ -277,6 +326,19 @@ export default function SnakeGame() {
                   <p className="text-green-400 font-mono text-lg animate-pulse">
                     Presiona una flecha para comenzar
                   </p>
+                </div>
+              )}
+              {gameOver && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 rounded-lg p-6 text-center space-y-4">
+                  <h2 className="text-3xl font-bold text-red-500 font-mono">GAME OVER</h2>
+                  <p className="text-lg text-gray-300 font-mono">Duración: {gameDuration}</p>
+                  <p className="text-lg text-gray-300 font-mono">Puntos: {finalScore}</p>
+                  <button 
+                    onClick={resetGame}
+                    className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-600 text-white font-mono rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50"
+                  >
+                    Jugar de Nuevo
+                  </button>
                 </div>
               )}
             </div>
