@@ -105,7 +105,7 @@ def rabbitmq_channel():
     try:
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
-                host='100.120.4.105',  # <- IP Tailscale del servidor RabbitMQ
+                host='100.67.213.98',  # <- IP Tailscale del servidor RabbitMQ
                 port=5672,   
                 credentials=pika.PlainCredentials('myuser', 'mypassword')
             )
